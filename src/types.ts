@@ -19,6 +19,7 @@ export interface CrdtWebSocketHelloFrame {
   kind: 'hello';
   peerId: string;
   documentId: string;
+  auth?: unknown;
 }
 
 export interface CrdtWebSocketWelcomeFrame {
@@ -60,6 +61,7 @@ export type CrdtWebSocketFrame =
 export interface CrdtWebSocketLike {
   readyState: number;
   binaryType?: string;
+  bufferedAmount?: number;
   send(data: string | ArrayBufferLike | ArrayBufferView, callback?: (error?: Error) => void): void;
   close(code?: number, reason?: string): void;
   addEventListener?(type: string, listener: (...args: unknown[]) => void): void;
@@ -78,8 +80,10 @@ export interface CrdtWebSocketConstructor {
   new(url: string, protocols?: string | string[]): CrdtWebSocketLike;
 }
 
+export type CrdtWebSocketFrameEncoding = 'binary' | 'json';
 export type CrdtWebSocketPeerListener = (peerId: string) => void | Promise<void>;
 export type CrdtWebSocketErrorListener = (error: unknown) => void;
+export type CrdtWebSocketAuthProvider = unknown | (() => unknown | Promise<unknown>);
 
 export interface CrdtWebSocketClientTransportOptions {
   url: string | URL;
@@ -87,9 +91,21 @@ export interface CrdtWebSocketClientTransportOptions {
   documentId: string;
   protocols?: string | string[];
   WebSocket?: CrdtWebSocketConstructor;
+  auth?: CrdtWebSocketAuthProvider;
+  frameEncoding?: CrdtWebSocketFrameEncoding;
+  maxFrameBytes?: number;
+  maxQueuedFrames?: number;
+  maxQueuedBytes?: number;
+  maxBufferedAmount?: number;
+  sendTimeoutMs?: number;
+  heartbeatIntervalMs?: number;
+  heartbeatTimeoutMs?: number;
   reconnect?: boolean;
   reconnectDelayMs?: number;
   maxReconnectDelayMs?: number;
+  reconnectMaxAttempts?: number;
+  reconnectBackoffFactor?: number;
+  reconnectJitterRatio?: number;
   onPeerJoin?: CrdtWebSocketPeerListener;
   onPeerLeave?: CrdtWebSocketPeerListener;
   onError?: CrdtWebSocketErrorListener;
@@ -111,6 +127,38 @@ export interface CrdtWebSocketProvider extends CrdtSyncProvider {
   readonly transport: CrdtWebSocketClientTransport;
 }
 
+export interface CrdtWebSocketAuthContext {
+  request?: unknown;
+}
+
+export interface CrdtWebSocketAuthResult {
+  ok?: boolean;
+  principal?: unknown;
+  closeCode?: number;
+  reason?: string;
+}
+
+export interface CrdtWebSocketRoomAdmissionContext extends CrdtWebSocketAuthContext {
+  peerId: string;
+  documentId: string;
+  auth?: unknown;
+  principal?: unknown;
+}
+
+export interface CrdtWebSocketRoomAdmissionResult {
+  ok?: boolean;
+  closeCode?: number;
+  reason?: string;
+}
+
+export type CrdtWebSocketAuthHook = (
+  context: CrdtWebSocketAuthContext
+) => boolean | CrdtWebSocketAuthResult | void | Promise<boolean | CrdtWebSocketAuthResult | void>;
+
+export type CrdtWebSocketRoomAdmissionHook = (
+  context: CrdtWebSocketRoomAdmissionContext
+) => boolean | CrdtWebSocketRoomAdmissionResult | void | Promise<boolean | CrdtWebSocketRoomAdmissionResult | void>;
+
 export interface CrdtWebSocketServerOptions {
   port?: number;
   host?: string;
@@ -118,6 +166,13 @@ export interface CrdtWebSocketServerOptions {
   server?: unknown;
   perMessageDeflate?: boolean;
   maxPayload?: number;
+  frameEncoding?: CrdtWebSocketFrameEncoding;
+  maxFrameBytes?: number;
+  maxBufferedAmount?: number;
+  heartbeatIntervalMs?: number;
+  heartbeatTimeoutMs?: number;
+  authenticate?: CrdtWebSocketAuthHook;
+  authorizeRoom?: CrdtWebSocketRoomAdmissionHook;
 }
 
 export interface CrdtWebSocketServer {

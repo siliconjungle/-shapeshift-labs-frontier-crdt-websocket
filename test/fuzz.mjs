@@ -5,6 +5,7 @@ import { checkCrdtSyncConvergence, createCrdtSyncEndpoint } from '@shapeshift-la
 import {
   createCrdtWebSocketProvider,
   decodeCrdtWebSocketFrame,
+  encodeCrdtWebSocketBinaryFrame,
   encodeCrdtWebSocketFrame
 } from '../dist/index.js';
 import { createCrdtWebSocketServer } from '../dist/server.js';
@@ -115,6 +116,12 @@ function fuzzWire(caseIndex) {
     payload: Buffer.from(JSON.stringify({ caseIndex, value: randInt(1000) })).toString('base64')
   };
   assert.deepStrictEqual(decodeCrdtWebSocketFrame(encodeCrdtWebSocketFrame(frame)), frame);
+  const binary = encodeCrdtWebSocketBinaryFrame(frame);
+  assert.deepStrictEqual(decodeCrdtWebSocketFrame(binary), frame);
+  assert.throws(
+    () => decodeCrdtWebSocketFrame(binary, { maxFrameBytes: Math.max(1, binary.byteLength - 1) }),
+    /maxFrameBytes|exceeds/
+  );
   assert.throws(() => decodeCrdtWebSocketFrame('{"kind":"sync","documentId":"","from":"a","to":"b","payload":""}'), /document id/);
 }
 

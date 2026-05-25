@@ -9,6 +9,7 @@ import {
   createCrdtWebSocketProvider,
   createCrdtWebSocketSyncFrame,
   decodeCrdtWebSocketFrame,
+  encodeCrdtWebSocketBinaryFrame,
   encodeCrdtWebSocketFrame
 } from '../dist/index.js';
 import { createCrdtWebSocketServer } from '../dist/server.js';
@@ -81,9 +82,12 @@ const frame = createCrdtWebSocketSyncFrame('bench-doc', 'alice', 'bob', {
 });
 
 const rows = [
-  runRow('WebSocket frame encode/decode', 5000, () => {
+  runRow('WebSocket binary frame encode/decode', 5000, () => {
+    sink += decodeCrdtWebSocketFrame(encodeCrdtWebSocketBinaryFrame(frame)).kind.length;
+  }, { bytes: encodeCrdtWebSocketBinaryFrame(frame).byteLength }),
+  runRow('WebSocket JSON frame encode/decode', 5000, () => {
     sink += decodeCrdtWebSocketFrame(encodeCrdtWebSocketFrame(frame)).kind.length;
-  }),
+  }, { bytes: encodeCrdtWebSocketFrame(frame).length }),
   await runAsyncRow('WebSocket client/server handshake', 20, async () => {
     sink += await connectOnce();
   }),

@@ -1,6 +1,6 @@
 {
   "name": "@shapeshift-labs/frontier-crdt-websocket",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "WebSocket client and server transports for Frontier CRDT sync providers.",
   "type": "module",
   "license": "MIT",
@@ -56,6 +56,7 @@
   },
   "files": [
     "dist",
+    "examples",
     "README.md",
     "LICENSE",
     "benchmarks/package-bench.mjs"
@@ -75,7 +76,8 @@
   },
   "scripts": {
     "build": "node build.mjs",
-    "test": "npm run build && npm run typecheck && node test/smoke.mjs && node test/fuzz.mjs --cases 80",
+    "test": "npm run build && npm run typecheck && node test/smoke.mjs && node test/integration.mjs && node test/fuzz.mjs --cases 80",
+    "integration": "npm run build && node test/integration.mjs",
     "prepack": "npm run test",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "fuzz": "npm run build && node test/fuzz.mjs",

@@ -36,7 +36,15 @@ import { createCrdtWebSocketServer } from '@shapeshift-labs/frontier-crdt-websoc
 
 const server = createCrdtWebSocketServer({
   host: '127.0.0.1',
-  port: 8787
+  port: 8787,
+  frameEncoding: 'binary',
+  heartbeatIntervalMs: 30000,
+  heartbeatTimeoutMs: 10000,
+  authenticate: () => true,
+  authorizeRoom: ({ peerId, documentId }) => {
+    console.log(`admit peer=${peerId} document=${documentId}`);
+    return true;
+  }
 });
 
 await server.ready;
@@ -61,7 +69,8 @@ const provider = createCrdtWebSocketProvider(endpoint, {
   url: 'ws://127.0.0.1:8787',
   documentId: 'doc-1',
   peerId: 'alice',
-  syncOnConnect: true
+  syncOnConnect: true,
+  reconnect: true
 });
 
 await provider.connect();
@@ -75,9 +84,12 @@ await provider.sync();
 import {
   createCrdtWebSocketClientTransport,
   createCrdtWebSocketProvider,
+  encodeCrdtWebSocketBinaryFrame,
   encodeCrdtWebSocketFrame,
+  encodeCrdtWebSocketTransportFrame,
   decodeCrdtWebSocketFrame,
   type CrdtWebSocketClientTransport,
+  type CrdtWebSocketFrameEncoding,
   type CrdtWebSocketProvider
 } from '@shapeshift-labs/frontier-crdt-websocket';
 
@@ -99,7 +111,14 @@ Useful options:
 - `syncOnConnect`: asks known peers for state as soon as the provider connects.
 - `autoSyncOnPeerJoin`: defaults to `true`; syncs with peers announced by the server.
 - `WebSocket`: optional constructor injection for Node tests, browser polyfills, and custom runtimes.
+- `frameEncoding`: defaults to `'binary'`; set `'json'` for readable compatibility frames.
+- `auth`: static value or async function copied into the initial `hello` frame for your server-side admission hook.
 - `reconnect`: opt-in reconnect loop with bounded exponential delay.
+- `reconnectDelayMs`, `maxReconnectDelayMs`, `reconnectMaxAttempts`, `reconnectBackoffFactor`, `reconnectJitterRatio`: reconnect backoff controls.
+- `heartbeatIntervalMs` and `heartbeatTimeoutMs`: app-level ping/pong watchdog. Set the interval to `0` to disable it.
+- `maxFrameBytes`: hard limit for inbound and outbound frames.
+- `maxQueuedFrames` and `maxQueuedBytes`: bounds for messages queued while disconnected.
+- `maxBufferedAmount` and `sendTimeoutMs`: browser/Node WebSocket backpressure guard.
 
 ### `createCrdtWebSocketClientTransport(options)`
 
@@ -109,13 +128,30 @@ Creates only the transport. Use this when you want to pass a WebSocket transport
 
 Creates a room-routing WebSocket server. Peers join by sending a `hello` frame containing `{ peerId, documentId }`. Sync frames are routed to peers in the same document room.
 
+Useful options:
+
+- `frameEncoding`: defaults to `'binary'`; set `'json'` when debugging frames manually.
+- `maxFrameBytes`: passed to the Node `ws` server as `maxPayload` and checked by the Frontier frame decoder.
+- `maxBufferedAmount`: closes slow peers with the backpressure close code before unbounded buffering.
+- `heartbeatIntervalMs` and `heartbeatTimeoutMs`: server-side app ping/pong timeout.
+- `authenticate(context)`: connection-level hook slot. Return `false` or `{ ok: false }` to reject the socket.
+- `authorizeRoom(context)`: room admission hook slot. It receives `{ request, peerId, documentId, auth, principal }` and may reject a `hello`.
+
+The auth hooks are deliberately just slots. This package does not implement tokens, sessions, ACLs, tenancy, or authorization policy.
+
+### Wire Helpers
+
+`encodeCrdtWebSocketTransportFrame(frame)` emits the default binary frame. `encodeCrdtWebSocketFrame(frame)` emits the JSON compatibility frame. `decodeCrdtWebSocketFrame(input, { maxFrameBytes })` accepts either format.
+
+Binary is the default for provider/server transport because sync frames carry byte payloads and avoid base64 expansion. JSON remains useful for debugging, proxies, and tiny control-heavy workloads where human-readable frames matter more than wire size.
+
 ## Subpath Imports
 
 ```ts
 import { createCrdtWebSocketProvider } from '@shapeshift-labs/frontier-crdt-websocket';
 import { createCrdtWebSocketClientTransport } from '@shapeshift-labs/frontier-crdt-websocket/client';
 import { createCrdtWebSocketServer } from '@shapeshift-labs/frontier-crdt-websocket/server';
-import { encodeCrdtWebSocketFrame } from '@shapeshift-labs/frontier-crdt-websocket/wire';
+import { encodeCrdtWebSocketTransportFrame } from '@shapeshift-labs/frontier-crdt-websocket/wire';
 ```
 
 The root import is client-safe and does not import the Node `ws` server. The `./server` subpath owns the Node WebSocket server dependency.
@@ -128,6 +164,9 @@ This package owns:
 - WebSocket provider helper wiring peer announcements into provider sync.
 - Node WebSocket room server for document/peer routing.
 - WebSocket frame encode/decode helpers.
+- Binary WebSocket frame transport plus JSON compatibility frames.
+- Heartbeat, reconnect, backpressure, queue, and frame-size guard rails.
+- Hook slots for connection authentication and room admission.
 - Transport-level tests, fuzzers, and benchmarks.
 
 It does not own:
@@ -150,7 +189,23 @@ npm run bench
 npm run pack:dry
 ```
 
-The package test suite covers root and subpath imports, frame validation, client/server handshakes, peer join/leave announcements, two-peer document convergence, and randomized WebSocket sync schedules.
+The package test suite covers root and subpath imports, frame validation, binary and JSON frame round trips, client/server handshakes, auth/admission rejection, heartbeat timeout, reconnect after server restart, many-peer convergence, slow-client backpressure, malformed and oversized frames, queue limits, peer join/leave announcements, two-peer document convergence, and randomized WebSocket sync schedules.
+
+## Examples
+
+The package includes runnable examples:
+
+```sh
+node examples/node-server.mjs
+node examples/reconnect-client.mjs
+```
+
+Browser examples:
+
+- `examples/browser-client.html`: one browser client connected to a WebSocket room.
+- `examples/two-tabs.html`: open the file in two tabs and edit the same document.
+
+The examples are intentionally small transport examples. Production apps should supply their own authentication, admission, persistence, TLS, origin checks, rate limits, and tenant policy.
 
 ## Benchmarks
 
@@ -160,13 +215,14 @@ Run the package-local benchmark:
 npm run bench
 ```
 
-Latest local package benchmark on Node v26.1.0, darwin arm64, 5 rounds:
+Latest local package benchmark on Node v26.1.0, darwin arm64, 7 rounds:
 
-| Fixture | Median | p95 |
-| --- | ---: | ---: |
-| WebSocket frame encode/decode | 0.61 us | 0.65 us |
-| WebSocket client/server handshake | 484.25 us | 756.20 us |
-| WebSocket two-peer CRDT sync | 1.94 ms | 2.56 ms |
+| Fixture | Median | p95 | Bytes |
+| --- | ---: | ---: | ---: |
+| WebSocket binary frame encode/decode | 3.26 us | 3.64 us | 165 |
+| WebSocket JSON frame encode/decode | 0.78 us | 0.82 us | 247 |
+| WebSocket client/server handshake | 384.69 us | 539.68 us | - |
+| WebSocket two-peer CRDT sync | 1.69 ms | 1.80 ms | - |
 
 These are Frontier-only package measurements, not competitor comparisons.
 

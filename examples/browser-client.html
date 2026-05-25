@@ -1,0 +1,84 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Frontier CRDT WebSocket Browser Client</title>
+<style>
+  body { font: 14px system-ui, sans-serif; margin: 24px; max-width: 720px; }
+  label { display: block; margin: 12px 0 6px; font-weight: 600; }
+  input, textarea, button { box-sizing: border-box; font: inherit; width: 100%; }
+  input, textarea { border: 1px solid #bbb; padding: 8px; }
+  textarea { height: 180px; }
+  button { margin-top: 12px; padding: 8px; }
+  pre { background: #f4f4f4; padding: 12px; overflow: auto; }
+</style>
+<h1>Frontier CRDT WebSocket Browser Client</h1>
+<label>Server URL</label>
+<input id="url" value="ws://127.0.0.1:8787">
+<label>Document ID</label>
+<input id="documentId" value="demo">
+<label>Peer ID</label>
+<input id="peerId">
+<button id="connect">Connect</button>
+<label>Shared Body</label>
+<textarea id="body" disabled></textarea>
+<pre id="status">disconnected</pre>
+<script type="module">
+  import { createCrdtDocument } from 'https://esm.sh/@shapeshift-labs/frontier-crdt@0.1.0';
+  import { createCrdtSyncEndpoint } from 'https://esm.sh/@shapeshift-labs/frontier-crdt-sync@0.1.4';
+  import { createCrdtWebSocketProvider } from 'https://esm.sh/@shapeshift-labs/frontier-crdt-websocket';
+
+  const peerInput = document.querySelector('#peerId');
+  const bodyInput = document.querySelector('#body');
+  const status = document.querySelector('#status');
+  peerInput.value = `browser-${Math.random().toString(36).slice(2)}`;
+
+  let provider;
+  let doc;
+  let applyingRemote = false;
+
+  document.querySelector('#connect').addEventListener('click', async () => {
+    const peerId = peerInput.value;
+    const documentId = document.querySelector('#documentId').value;
+    doc = createCrdtDocument({ actorId: peerId });
+    provider = createCrdtWebSocketProvider(
+      createCrdtSyncEndpoint(doc, { documentId, senderId: peerId, actorRangeSync: true }),
+      {
+        url: document.querySelector('#url').value,
+        documentId,
+        peerId,
+        syncOnConnect: true,
+        reconnect: true,
+        onPeerJoin: async (peer) => {
+          status.textContent = `peer joined: ${peer}`;
+          await provider.sync(peer);
+          render();
+        },
+        onPeerLeave: (peer) => { status.textContent = `peer left: ${peer}`; },
+        onError: (error) => { status.textContent = String(error?.message || error); }
+      }
+    );
+    await provider.connect();
+    bodyInput.disabled = false;
+    status.textContent = `connected as ${peerId}`;
+    render();
+  });
+
+  bodyInput.addEventListener('input', async () => {
+    if (!doc || !provider || applyingRemote) return;
+    doc.set('/body', bodyInput.value);
+    await provider.sync();
+    status.textContent = `synced ${new Date().toLocaleTimeString()}`;
+  });
+
+  setInterval(() => {
+    if (doc) render();
+  }, 500);
+
+  function render() {
+    const value = doc?.toJSON()?.body || '';
+    if (bodyInput.value !== value) {
+      applyingRemote = true;
+      bodyInput.value = value;
+      applyingRemote = false;
+    }
+  }
+</script>
