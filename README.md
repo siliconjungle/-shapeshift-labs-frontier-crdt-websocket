@@ -215,14 +215,14 @@ Run the package-local benchmark:
 npm run bench
 ```
 
-Latest local package benchmark on Node v26.1.0, darwin arm64, 7 rounds:
+Latest local package benchmark on Node v26.1.0, darwin arm64, 9 rounds:
 
 | Fixture | Median | p95 | Bytes |
 | --- | ---: | ---: | ---: |
-| WebSocket binary frame encode/decode | 3.26 us | 3.64 us | 165 |
-| WebSocket JSON frame encode/decode | 0.78 us | 0.82 us | 247 |
-| WebSocket client/server handshake | 384.69 us | 539.68 us | - |
-| WebSocket two-peer CRDT sync | 1.69 ms | 1.80 ms | - |
+| WebSocket binary frame encode/decode | 2.46 us | 2.71 us | 165 |
+| WebSocket JSON frame encode/decode | 0.76 us | 0.79 us | 247 |
+| WebSocket client/server handshake | 377.39 us | 580.35 us | - |
+| WebSocket two-peer CRDT sync | 1.79 ms | 2.27 ms | - |
 
 These are Frontier-only package measurements, not competitor comparisons.
 

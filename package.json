@@ -1,6 +1,6 @@
 {
   "name": "@shapeshift-labs/frontier-crdt-websocket",
-  "version": "0.1.2",
+  "version": "0.1.4",
   "description": "WebSocket client and server transports for Frontier CRDT sync providers.",
   "type": "module",
   "license": "MIT",

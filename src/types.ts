@@ -40,7 +40,7 @@ export interface CrdtWebSocketSyncFrame {
   documentId: string;
   from: string;
   to: string;
-  payload: string;
+  payload: string | Uint8Array;
 }
 
 export interface CrdtWebSocketPingFrame {

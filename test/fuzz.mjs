@@ -117,12 +117,17 @@ function fuzzWire(caseIndex) {
   };
   assert.deepStrictEqual(decodeCrdtWebSocketFrame(encodeCrdtWebSocketFrame(frame)), frame);
   const binary = encodeCrdtWebSocketBinaryFrame(frame);
-  assert.deepStrictEqual(decodeCrdtWebSocketFrame(binary), frame);
+  assert.deepStrictEqual(normalizeFramePayload(decodeCrdtWebSocketFrame(binary)), frame);
   assert.throws(
     () => decodeCrdtWebSocketFrame(binary, { maxFrameBytes: Math.max(1, binary.byteLength - 1) }),
     /maxFrameBytes|exceeds/
   );
   assert.throws(() => decodeCrdtWebSocketFrame('{"kind":"sync","documentId":"","from":"a","to":"b","payload":""}'), /document id/);
+}
+
+function normalizeFramePayload(frame) {
+  if (frame.kind !== 'sync' || typeof frame.payload === 'string') return frame;
+  return { ...frame, payload: Buffer.from(frame.payload).toString('base64') };
 }
 
 async function settle(peers) {

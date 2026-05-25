@@ -26,6 +26,7 @@ const textDecoder = new TextDecoder();
 const textEncoder = new TextEncoder();
 const binaryMagic = new Uint8Array([70, 67, 87, 83]);
 const binaryVersion = 1;
+const base64ByBytes = new WeakMap<Uint8Array, string>();
 const kindToCode: Record<CrdtWebSocketFrame['kind'], number> = {
   hello: 1,
   welcome: 2,
@@ -37,7 +38,7 @@ const kindToCode: Record<CrdtWebSocketFrame['kind'], number> = {
 };
 
 export function encodeCrdtWebSocketFrame(frame: CrdtWebSocketFrame): string {
-  return JSON.stringify(cloneCrdtWebSocketFrame(frame));
+  return JSON.stringify(toJsonFrame(frame));
 }
 
 export function encodeCrdtWebSocketBinaryFrame(frame: CrdtWebSocketFrame): Uint8Array {
@@ -93,8 +94,7 @@ export function cloneCrdtWebSocketFrame(frame: CrdtWebSocketFrame): CrdtWebSocke
       assertPeerId(frame.from);
       assertPeerId(frame.to);
       assertDocumentId(frame.documentId);
-      if (typeof frame.payload !== 'string') throw new TypeError('invalid Frontier CRDT WebSocket sync payload');
-      return { kind: 'sync', documentId: frame.documentId, from: frame.from, to: frame.to, payload: frame.payload };
+      return { kind: 'sync', documentId: frame.documentId, from: frame.from, to: frame.to, payload: cloneSyncPayload(frame.payload) };
     case 'ping':
     case 'pong': {
       const out: CrdtWebSocketPingFrame = { kind: frame.kind };
@@ -132,12 +132,12 @@ export function createCrdtWebSocketSyncFrame(
     documentId,
     from,
     to,
-    payload: bytesToBase64(normalizeSyncPayload(payload))
+    payload: normalizeSyncPayload(payload)
   };
 }
 
 export function decodeCrdtWebSocketSyncPayload(frame: CrdtWebSocketSyncFrame): Uint8Array {
-  return base64ToBytes((cloneCrdtWebSocketFrame(frame) as CrdtWebSocketSyncFrame).payload);
+  return syncPayloadToBytes((cloneCrdtWebSocketFrame(frame) as CrdtWebSocketSyncFrame).payload);
 }
 
 export function assertPeerId(peerId: string): void {
@@ -209,7 +209,7 @@ class BinaryFrameWriter {
         this.writeString(frame.documentId);
         this.writeString(frame.from);
         this.writeString(frame.to);
-        this.writeBytesWithLength(base64ToBytes(frame.payload));
+        this.writeBytesWithLength(syncPayloadToBytes(frame.payload));
         break;
       case 'ping':
       case 'pong': {
@@ -318,7 +318,7 @@ class BinaryFrameReader {
           documentId: this.readString(),
           from: this.readString(),
           to: this.readString(),
-          payload: bytesToBase64(this.readBytesWithLength())
+          payload: this.readBytesWithLength()
         };
         break;
       case 6:
@@ -417,15 +417,49 @@ function normalizeSyncPayload(payload: CrdtSyncTransportPayload): Uint8Array {
   return encodeCrdtSyncMessage(decodeCrdtSyncMessage(payload));
 }
 
+function cloneSyncPayload(payload: string | Uint8Array): string | Uint8Array {
+  if (typeof payload === 'string') return payload;
+  if (payload instanceof Uint8Array) return payload;
+  throw new TypeError('invalid Frontier CRDT WebSocket sync payload');
+}
+
+function syncPayloadToBytes(payload: string | Uint8Array): Uint8Array {
+  return typeof payload === 'string' ? base64ToBytes(payload) : payload;
+}
+
+function toJsonFrame(frame: CrdtWebSocketFrame): CrdtWebSocketFrame {
+  const cloned = cloneCrdtWebSocketFrame(frame);
+  return cloned.kind === 'sync' && cloned.payload instanceof Uint8Array
+    ? { ...cloned, payload: bytesToBase64(cloned.payload) }
+    : cloned;
+}
+
 function bytesToBase64(bytes: Uint8Array): string {
+  const cached = base64ByBytes.get(bytes);
+  if (cached !== undefined) return cached;
   const maybeBuffer = (globalThis as { Buffer?: { from(input: Uint8Array): { toString(encoding: string): string } } }).Buffer;
-  if (maybeBuffer !== undefined) return maybeBuffer.from(bytes).toString('base64');
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-  return btoa(binary);
+  let base64: string;
+  if (maybeBuffer !== undefined) base64 = maybeBuffer.from(bytes).toString('base64');
+  else {
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    base64 = btoa(binary);
+  }
+  base64ByBytes.set(bytes, base64);
+  return base64;
 }
 
 function base64ToBytes(base64: string): Uint8Array {
+  validateBase64Payload(base64);
+  const maybeBuffer = (globalThis as { Buffer?: { from(input: string, encoding: string): Uint8Array } }).Buffer;
+  if (maybeBuffer !== undefined) return new Uint8Array(maybeBuffer.from(base64, 'base64'));
+  const binary = atob(base64);
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+  return out;
+}
+
+function validateBase64Payload(base64: string): void {
   if (
     base64.length % 4 !== 0 ||
     /[^A-Za-z0-9+/=]/.test(base64) ||
@@ -433,10 +467,4 @@ function base64ToBytes(base64: string): Uint8Array {
   ) {
     throw new TypeError('invalid Frontier CRDT WebSocket base64 payload');
   }
-  const maybeBuffer = (globalThis as { Buffer?: { from(input: string, encoding: string): Uint8Array } }).Buffer;
-  if (maybeBuffer !== undefined) return new Uint8Array(maybeBuffer.from(base64, 'base64'));
-  const binary = atob(base64);
-  const out = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
-  return out;
 }
