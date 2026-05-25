@@ -1,0 +1,48 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "rootDir": "src",
+    "outDir": "dist",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "stripInternal": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "skipLibCheck": true,
+    "composite": true,
+    "tsBuildInfoFile": "node_modules/.cache/tsconfig.tsbuildinfo",
+    "baseUrl": ".",
+    "paths": {
+      "@shapeshift-labs/frontier": [
+        "../frontier/src/index.ts"
+      ],
+      "@shapeshift-labs/frontier/*": [
+        "../frontier/src/*.ts"
+      ],
+      "@shapeshift-labs/frontier-crdt": [
+        "../frontier-crdt/src/index.ts"
+      ],
+      "@shapeshift-labs/frontier-crdt/*": [
+        "../frontier-crdt/src/*.ts"
+      ],
+      "@shapeshift-labs/frontier-crdt-sync": [
+        "../frontier-crdt-sync/src/index.ts"
+      ],
+      "@shapeshift-labs/frontier-crdt-sync/*": [
+        "../frontier-crdt-sync/src/*.ts"
+      ]
+    },
+    "ignoreDeprecations": "6.0"
+  },
+  "include": [
+    "src/**/*.ts"
+  ],
+  "references": [
+    {
+      "path": "../frontier-crdt-sync"
+    }
+  ]
+}

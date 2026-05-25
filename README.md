@@ -1,0 +1,175 @@
+# Frontier CRDT WebSocket
+
+WebSocket client and server transports for Frontier CRDT sync providers.
+
+This package sits above [`@shapeshift-labs/frontier-crdt-sync`](https://www.npmjs.com/package/@shapeshift-labs/frontier-crdt-sync). The sync package owns protocol state, document handles, storage, and encoded sync messages; this package only moves those messages over WebSocket rooms.
+
+- npm: [`@shapeshift-labs/frontier-crdt-websocket`](https://www.npmjs.com/package/@shapeshift-labs/frontier-crdt-websocket)
+- source: [`siliconjungle/-shapeshift-labs-frontier-crdt-websocket`](https://github.com/siliconjungle/-shapeshift-labs-frontier-crdt-websocket)
+- license: MIT
+
+## Related Packages
+
+- [`@shapeshift-labs/frontier`](https://www.npmjs.com/package/@shapeshift-labs/frontier): core JSON diff/apply primitives below the CRDT layer.
+- [`@shapeshift-labs/frontier-crdt`](https://www.npmjs.com/package/@shapeshift-labs/frontier-crdt): native CRDT document and update layer.
+- [`@shapeshift-labs/frontier-crdt-sync`](https://www.npmjs.com/package/@shapeshift-labs/frontier-crdt-sync): transport-agnostic sync protocol, provider, repo, storage, and document handles.
+
+Package source repositories:
+
+- [`siliconjungle/-shapeshift-labs-frontier`](https://github.com/siliconjungle/-shapeshift-labs-frontier)
+- [`siliconjungle/-shapeshift-labs-frontier-crdt`](https://github.com/siliconjungle/-shapeshift-labs-frontier-crdt)
+- [`siliconjungle/-shapeshift-labs-frontier-crdt-sync`](https://github.com/siliconjungle/-shapeshift-labs-frontier-crdt-sync)
+- [`siliconjungle/-shapeshift-labs-frontier-crdt-websocket`](https://github.com/siliconjungle/-shapeshift-labs-frontier-crdt-websocket)
+
+## Install
+
+```sh
+npm install @shapeshift-labs/frontier-crdt @shapeshift-labs/frontier-crdt-sync @shapeshift-labs/frontier-crdt-websocket
+```
+
+## Usage
+
+Server:
+
+```ts
+import { createCrdtWebSocketServer } from '@shapeshift-labs/frontier-crdt-websocket/server';
+
+const server = createCrdtWebSocketServer({
+  host: '127.0.0.1',
+  port: 8787
+});
+
+await server.ready;
+console.log(server.address());
+```
+
+Client:
+
+```ts
+import { createCrdtDocument } from '@shapeshift-labs/frontier-crdt';
+import { createCrdtSyncEndpoint } from '@shapeshift-labs/frontier-crdt-sync';
+import { createCrdtWebSocketProvider } from '@shapeshift-labs/frontier-crdt-websocket';
+
+const doc = createCrdtDocument({ actorId: 'alice' });
+const endpoint = createCrdtSyncEndpoint(doc, {
+  documentId: 'doc-1',
+  senderId: 'alice',
+  actorRangeSync: true
+});
+
+const provider = createCrdtWebSocketProvider(endpoint, {
+  url: 'ws://127.0.0.1:8787',
+  documentId: 'doc-1',
+  peerId: 'alice',
+  syncOnConnect: true
+});
+
+await provider.connect();
+doc.set('/title', 'Draft');
+await provider.sync();
+```
+
+## API
+
+```ts
+import {
+  createCrdtWebSocketClientTransport,
+  createCrdtWebSocketProvider,
+  encodeCrdtWebSocketFrame,
+  decodeCrdtWebSocketFrame,
+  type CrdtWebSocketClientTransport,
+  type CrdtWebSocketProvider
+} from '@shapeshift-labs/frontier-crdt-websocket';
+
+import {
+  createCrdtWebSocketServer,
+  type CrdtWebSocketServer
+} from '@shapeshift-labs/frontier-crdt-websocket/server';
+```
+
+### `createCrdtWebSocketProvider(endpoint, options)`
+
+Creates a Frontier sync provider with a WebSocket transport attached.
+
+Useful options:
+
+- `url`: WebSocket server URL.
+- `documentId`: room/document id.
+- `peerId`: local peer id.
+- `syncOnConnect`: asks known peers for state as soon as the provider connects.
+- `autoSyncOnPeerJoin`: defaults to `true`; syncs with peers announced by the server.
+- `WebSocket`: optional constructor injection for Node tests, browser polyfills, and custom runtimes.
+- `reconnect`: opt-in reconnect loop with bounded exponential delay.
+
+### `createCrdtWebSocketClientTransport(options)`
+
+Creates only the transport. Use this when you want to pass a WebSocket transport into `createCrdtSyncProvider` yourself.
+
+### `createCrdtWebSocketServer(options)`
+
+Creates a room-routing WebSocket server. Peers join by sending a `hello` frame containing `{ peerId, documentId }`. Sync frames are routed to peers in the same document room.
+
+## Subpath Imports
+
+```ts
+import { createCrdtWebSocketProvider } from '@shapeshift-labs/frontier-crdt-websocket';
+import { createCrdtWebSocketClientTransport } from '@shapeshift-labs/frontier-crdt-websocket/client';
+import { createCrdtWebSocketServer } from '@shapeshift-labs/frontier-crdt-websocket/server';
+import { encodeCrdtWebSocketFrame } from '@shapeshift-labs/frontier-crdt-websocket/wire';
+```
+
+The root import is client-safe and does not import the Node `ws` server. The `./server` subpath owns the Node WebSocket server dependency.
+
+## Package Scope
+
+This package owns:
+
+- WebSocket client transports for Frontier sync providers.
+- WebSocket provider helper wiring peer announcements into provider sync.
+- Node WebSocket room server for document/peer routing.
+- WebSocket frame encode/decode helpers.
+- Transport-level tests, fuzzers, and benchmarks.
+
+It does not own:
+
+- CRDT document semantics.
+- Sync state vectors, actor-range anti-entropy, or update encoding.
+- Storage adapters, repos, document handles, or editor bindings.
+- Rich text, awareness, undo, branch, or conflict APIs.
+
+## TypeScript
+
+The package ships ESM JavaScript plus `.d.ts` declarations for root, `./client`, `./server`, and `./wire`. The package-local TypeScript source lives in `src/` and compiles directly to `dist/`.
+
+## Validation
+
+```sh
+npm test
+npm run fuzz
+npm run bench
+npm run pack:dry
+```
+
+The package test suite covers root and subpath imports, frame validation, client/server handshakes, peer join/leave announcements, two-peer document convergence, and randomized WebSocket sync schedules.
+
+## Benchmarks
+
+Run the package-local benchmark:
+
+```sh
+npm run bench
+```
+
+Latest local package benchmark on Node v26.1.0, darwin arm64, 5 rounds:
+
+| Fixture | Median | p95 |
+| --- | ---: | ---: |
+| WebSocket frame encode/decode | 0.61 us | 0.65 us |
+| WebSocket client/server handshake | 484.25 us | 756.20 us |
+| WebSocket two-peer CRDT sync | 1.94 ms | 2.56 ms |
+
+These are Frontier-only package measurements, not competitor comparisons.
+
+## License
+
+MIT. See [LICENSE](./LICENSE).

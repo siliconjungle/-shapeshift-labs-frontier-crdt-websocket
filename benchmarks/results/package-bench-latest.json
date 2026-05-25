@@ -1,0 +1,25 @@
+{
+  "package": "@shapeshift-labs/frontier-crdt-websocket",
+  "version": "0.1.1",
+  "generatedAt": "2026-05-25T11:08:34.852Z",
+  "node": "v26.1.0",
+  "platform": "darwin arm64",
+  "rounds": 5,
+  "rows": [
+    {
+      "fixture": "WebSocket frame encode/decode",
+      "medianUs": 0.56,
+      "p95Us": 0.7
+    },
+    {
+      "fixture": "WebSocket client/server handshake",
+      "medianUs": 395.34,
+      "p95Us": 1014.6
+    },
+    {
+      "fixture": "WebSocket two-peer CRDT sync",
+      "medianUs": 1729.48,
+      "p95Us": 2427.87
+    }
+  ]
+}
